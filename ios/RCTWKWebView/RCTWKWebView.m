@@ -20,6 +20,7 @@
 @property (nonatomic, copy) RCTDirectEventBlock onProgress;
 @property (nonatomic, copy) RCTDirectEventBlock onMessage;
 @property (assign) BOOL sendCookies;
+@property (nonatomic, copy) RCTBubblingEventBlock onLinkClick;
 
 @end
 
@@ -45,6 +46,7 @@
     _webView = [[WKWebView alloc] initWithFrame:self.bounds configuration:config];
     _webView.UIDelegate = self;
     _webView.navigationDelegate = self;
+    _webView.scrollView.decelerationRate = UIScrollViewDecelerationRateNormal;
     [_webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
     [self addSubview:_webView];
   }
@@ -233,6 +235,14 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:(NSCoder *)aDecoder)
   
   BOOL isJSNavigation = [scheme isEqualToString:RCTJSNavigationScheme];
   
+  if(navigationAction.navigationType ==  WKNavigationTypeLinkActivated)
+    {
+        if (_onLinkClick) {
+            _onLinkClick(@{@"link":url.absoluteString});
+        }
+        decisionHandler(WKNavigationActionPolicyCancel);
+    }
+
   // skip this for the JS Navigation handler
   if (!isJSNavigation && _onShouldStartLoadWithRequest) {
     NSMutableDictionary<NSString *, id> *event = [self baseEvent];

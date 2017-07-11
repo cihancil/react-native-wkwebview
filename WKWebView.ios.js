@@ -206,199 +206,201 @@ var WKWebView = React.createClass({
      * A Boolean value that determines whether paging is enabled for the scroll view.
     */
     pagingEnabled: PropTypes.bool,
+    onLinkClick: PropTypes.func,
   },
   getInitialState() {
     return {
       viewState: WebViewState.IDLE,
       lastErrorEvent: (null: ?ErrorEvent),
-      startInLoadingState: true,
+  startInLoadingState: true,
     };
   },
 
-  componentWillMount: function() {
-    if (this.props.startInLoadingState) {
-      this.setState({viewState: WebViewState.LOADING});
-    }
-  },
-
-  render() {
-    var otherView = null;
-
-    if (this.state.viewState === WebViewState.LOADING) {
-      otherView = (this.props.renderLoading || defaultRenderLoading)();
-    } else if (this.state.viewState === WebViewState.ERROR) {
-      var errorEvent = this.state.lastErrorEvent;
-      invariant(
-        errorEvent != null,
-        'lastErrorEvent expected to be non-null'
-      );
-      otherView = (this.props.renderError || defaultRenderError)(
-        errorEvent.domain,
-        errorEvent.code,
-        errorEvent.description
-      );
-    } else if (this.state.viewState !== WebViewState.IDLE) {
-      console.error(
-        'RCTWKWebView invalid state encountered: ' + this.state.loading
-      );
-    }
-
-    var webViewStyles = [styles.container, styles.webView, this.props.style];
-    if (this.state.viewState === WebViewState.LOADING ||
-      this.state.viewState === WebViewState.ERROR) {
-      // if we're in either LOADING or ERROR states, don't show the webView
-      webViewStyles.push(styles.hidden);
-    }
-
-    var onShouldStartLoadWithRequest = this.props.onShouldStartLoadWithRequest && ((event: Event) => {
-      var shouldStart = this.props.onShouldStartLoadWithRequest &&
-        this.props.onShouldStartLoadWithRequest(event.nativeEvent);
-      WKWebViewManager.startLoadWithResult(!!shouldStart, event.nativeEvent.lockIdentifier);
-    });
-
-    var source = Object.assign({}, this.props.source || {} , { 
-      sendCookies: this.props.sendCookies,
-      customUserAgent: this.props.customUserAgent
-    });
-    if (this.props.html) {
-      source.html = this.props.html;
-    } else if (this.props.url) {
-      source.uri = this.props.url;
-    }
-
-    var webView =
-      <RCTWKWebView
-        ref={RCT_WEBVIEW_REF}
-        key="webViewKey"
-        style={webViewStyles}
-        source={resolveAssetSource(source)}
-        injectedJavaScript={this.props.injectedJavaScript}
-        bounces={this.props.bounces}
-        scrollEnabled={this.props.scrollEnabled}
-        contentInset={this.props.contentInset}
-        allowsBackForwardNavigationGestures={this.props.allowsBackForwardNavigationGestures}
-        automaticallyAdjustContentInsets={this.props.automaticallyAdjustContentInsets}
-        openNewWindowInWebView={this.props.openNewWindowInWebView}
-        onLoadingStart={this._onLoadingStart}
-        onLoadingFinish={this._onLoadingFinish}
-        onLoadingError={this._onLoadingError}
-        onProgress={this._onProgress}
-        onMessage={this._onMessage}
-        onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
-        pagingEnabled={this.props.pagingEnabled}
-      />;
-
-    return (
-      <View style={styles.container}>
-        {webView}
-        {otherView}
-      </View>
-    );
-  },
-
-  /**
-   * Go forward one page in the webview's history.
-   */
-  goForward: function() {
-    UIManager.dispatchViewManagerCommand(
-      this.getWebViewHandle(),
-      UIManager.RCTWKWebView.Commands.goForward,
-      null
-    );
-  },
-
-  /**
-   * Go back one page in the webview's history.
-   */
-  goBack: function() {
-    UIManager.dispatchViewManagerCommand(
-      this.getWebViewHandle(),
-      UIManager.RCTWKWebView.Commands.goBack,
-      null
-    );
-  },
-
-  /**
-   * Reloads the current page.
-   */
-  reload: function() {
-    UIManager.dispatchViewManagerCommand(
-      this.getWebViewHandle(),
-      UIManager.RCTWKWebView.Commands.reload,
-      null
-    );
-  },
-
-  /**
-   * Stop loading the current page.
-   */
-  stopLoading: function() {
-    UIManager.dispatchViewManagerCommand(
-      this.getWebViewHandle(),
-      UIManager.RCTWKWebView.Commands.stopLoading,
-      null
-    )
-  },
-
-  evaluateJavaScript: function(js) {
-    return WKWebViewManager.evaluateJavaScript(this.getWebViewHandle(), js);
-  },
-
-  /**
-   * We return an event with a bunch of fields including:
-   *  url, title, loading, canGoBack, canGoForward
-   */
-  _updateNavigationState: function(event: Event) {
-    if (this.props.onNavigationStateChange) {
-      this.props.onNavigationStateChange(event.nativeEvent);
-    }
-  },
-
-  /**
-   * Returns the native webview node.
-   */
-  getWebViewHandle: function(): any {
-    return ReactNative.findNodeHandle(this.refs[RCT_WEBVIEW_REF]);
-  },
-
-  _onLoadingStart: function(event: Event) {
-    var onLoadStart = this.props.onLoadStart;
-    onLoadStart && onLoadStart(event);
-    this._updateNavigationState(event);
-  },
-
-  _onLoadingError: function(event: Event) {
-    event.persist(); // persist this event because we need to store it
-    var {onError, onLoadEnd} = this.props;
-    onError && onError(event);
-    onLoadEnd && onLoadEnd(event);
-    console.warn('Encountered an error loading page', event.nativeEvent);
-
-    this.setState({
-      lastErrorEvent: event.nativeEvent,
-      viewState: WebViewState.ERROR
-    });
-  },
-
-  _onLoadingFinish: function(event: Event) {
-    var {onLoad, onLoadEnd} = this.props;
-    onLoad && onLoad(event);
-    onLoadEnd && onLoadEnd(event);
-    this.setState({
-      viewState: WebViewState.IDLE,
-    });
-    this._updateNavigationState(event);
-  },
-
-  _onProgress(event: Event) {
-    var onProgress = this.props.onProgress;
-    onProgress && onProgress(event.nativeEvent.progress);
-  },
-
-  _onMessage(event: Event) {
-    var onMessage = this.props.onMessage;
-    onMessage && onMessage(event.nativeEvent);
+componentWillMount: function() {
+  if (this.props.startInLoadingState) {
+    this.setState({ viewState: WebViewState.LOADING });
   }
+},
+
+render() {
+  var otherView = null;
+
+  if (this.state.viewState === WebViewState.LOADING) {
+    otherView = (this.props.renderLoading || defaultRenderLoading)();
+  } else if (this.state.viewState === WebViewState.ERROR) {
+    var errorEvent = this.state.lastErrorEvent;
+    invariant(
+      errorEvent != null,
+      'lastErrorEvent expected to be non-null'
+    );
+    otherView = (this.props.renderError || defaultRenderError)(
+      errorEvent.domain,
+      errorEvent.code,
+      errorEvent.description
+    );
+  } else if (this.state.viewState !== WebViewState.IDLE) {
+    console.error(
+      'RCTWKWebView invalid state encountered: ' + this.state.loading
+    );
+  }
+
+  var webViewStyles = [styles.container, styles.webView, this.props.style];
+  if (this.state.viewState === WebViewState.LOADING ||
+    this.state.viewState === WebViewState.ERROR) {
+    // if we're in either LOADING or ERROR states, don't show the webView
+    webViewStyles.push(styles.hidden);
+  }
+
+  var onShouldStartLoadWithRequest = this.props.onShouldStartLoadWithRequest && ((event: Event) => {
+    var shouldStart = this.props.onShouldStartLoadWithRequest &&
+      this.props.onShouldStartLoadWithRequest(event.nativeEvent);
+    WKWebViewManager.startLoadWithResult(!!shouldStart, event.nativeEvent.lockIdentifier);
+  });
+
+  var source = Object.assign({}, this.props.source || {}, {
+    sendCookies: this.props.sendCookies,
+    customUserAgent: this.props.customUserAgent
+  });
+  if (this.props.html) {
+    source.html = this.props.html;
+  } else if (this.props.url) {
+    source.uri = this.props.url;
+  }
+
+  var webView =
+    <RCTWKWebView
+      ref={RCT_WEBVIEW_REF}
+      key="webViewKey"
+      style={webViewStyles}
+      source={resolveAssetSource(source)}
+      injectedJavaScript={this.props.injectedJavaScript}
+      bounces={this.props.bounces}
+      scrollEnabled={this.props.scrollEnabled}
+      contentInset={this.props.contentInset}
+      allowsBackForwardNavigationGestures={this.props.allowsBackForwardNavigationGestures}
+      automaticallyAdjustContentInsets={this.props.automaticallyAdjustContentInsets}
+      openNewWindowInWebView={this.props.openNewWindowInWebView}
+      onLoadingStart={this._onLoadingStart}
+      onLoadingFinish={this._onLoadingFinish}
+      onLoadingError={this._onLoadingError}
+      onProgress={this._onProgress}
+      onMessage={this._onMessage}
+      onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+      pagingEnabled={this.props.pagingEnabled}
+      onLinkClick={this.props.onLinkClick}
+    />;
+
+  return (
+    <View style={styles.container}>
+      {webView}
+      {otherView}
+    </View>
+  );
+},
+
+/**
+ * Go forward one page in the webview's history.
+ */
+goForward: function() {
+  UIManager.dispatchViewManagerCommand(
+    this.getWebViewHandle(),
+    UIManager.RCTWKWebView.Commands.goForward,
+    null
+  );
+},
+
+/**
+ * Go back one page in the webview's history.
+ */
+goBack: function() {
+  UIManager.dispatchViewManagerCommand(
+    this.getWebViewHandle(),
+    UIManager.RCTWKWebView.Commands.goBack,
+    null
+  );
+},
+
+/**
+ * Reloads the current page.
+ */
+reload: function() {
+  UIManager.dispatchViewManagerCommand(
+    this.getWebViewHandle(),
+    UIManager.RCTWKWebView.Commands.reload,
+    null
+  );
+},
+
+/**
+ * Stop loading the current page.
+ */
+stopLoading: function() {
+  UIManager.dispatchViewManagerCommand(
+    this.getWebViewHandle(),
+    UIManager.RCTWKWebView.Commands.stopLoading,
+    null
+  )
+},
+
+evaluateJavaScript: function(js) {
+  return WKWebViewManager.evaluateJavaScript(this.getWebViewHandle(), js);
+},
+
+/**
+ * We return an event with a bunch of fields including:
+ *  url, title, loading, canGoBack, canGoForward
+ */
+_updateNavigationState: function(event: Event) {
+  if (this.props.onNavigationStateChange) {
+    this.props.onNavigationStateChange(event.nativeEvent);
+  }
+},
+
+/**
+ * Returns the native webview node.
+ */
+getWebViewHandle: function(): any {
+  return ReactNative.findNodeHandle(this.refs[RCT_WEBVIEW_REF]);
+},
+
+_onLoadingStart: function(event: Event) {
+  var onLoadStart = this.props.onLoadStart;
+  onLoadStart && onLoadStart(event);
+  this._updateNavigationState(event);
+},
+
+_onLoadingError: function(event: Event) {
+  event.persist(); // persist this event because we need to store it
+  var { onError, onLoadEnd } = this.props;
+  onError && onError(event);
+  onLoadEnd && onLoadEnd(event);
+  console.warn('Encountered an error loading page', event.nativeEvent);
+
+  this.setState({
+    lastErrorEvent: event.nativeEvent,
+    viewState: WebViewState.ERROR
+  });
+},
+
+_onLoadingFinish: function(event: Event) {
+  var { onLoad, onLoadEnd } = this.props;
+  onLoad && onLoad(event);
+  onLoadEnd && onLoadEnd(event);
+  this.setState({
+    viewState: WebViewState.IDLE,
+  });
+  this._updateNavigationState(event);
+},
+
+_onProgress(event: Event) {
+  var onProgress = this.props.onProgress;
+  onProgress && onProgress(event.nativeEvent.progress);
+},
+
+_onMessage(event: Event) {
+  var onMessage = this.props.onMessage;
+  onMessage && onMessage(event.nativeEvent);
+}
 });
 
 var RCTWKWebView = requireNativeComponent('RCTWKWebView', WKWebView, {
